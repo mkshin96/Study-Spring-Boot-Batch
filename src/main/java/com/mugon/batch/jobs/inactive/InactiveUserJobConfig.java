@@ -36,6 +36,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 @AllArgsConstructor
 @Configuration
@@ -50,25 +51,25 @@ public class InactiveUserJobConfig {
 
     @Bean
     public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep, InactiveJobListener inactiveJobListener,
-                               Flow inactiveJobFlow) {
+                               Flow multiFlow) {
         return jobBuilderFactory.get("inactiveUserJob")
                 .preventRestart()
                 .listener(inactiveJobListener)
-                .start(inactiveJobFlow)
+                .start(multiFlow)
                 .end()
                 .build();
     }
 
-    @Bean
-    public Flow inactiveJobFlow(Step inactiveJobStep) {
-        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow");
-
-        return flowBuilder
-                .start(new InactiveJobExecutionDecider())
-                .on(FlowExecutionStatus.FAILED.getName()).end()
-                .on(FlowExecutionStatus.COMPLETED.getName()).to(inactiveJobStep)
-                .end();
-    }
+//    @Bean
+//    public Flow inactiveJobFlow(Step inactiveJobStep) {
+//        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow");
+//
+//        return flowBuilder
+//                .start(new InactiveJobExecutionDecider())
+//                .on(FlowExecutionStatus.FAILED.getName()).end()
+//                .on(FlowExecutionStatus.COMPLETED.getName()).to(inactiveJobStep)
+//                .end();
+//    }
 
     @Bean
     public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, ListItemReader<User> inactiveUserReader
@@ -150,5 +151,27 @@ public class InactiveUserJobConfig {
     @Bean
     public TaskExecutor taskExecutor() {
         return new SimpleAsyncTaskExecutor("Batch_Task");
+    }
+
+    @Bean
+    public Flow multiFlow(Step inactiveJobStep) {
+        Flow flows[] = new Flow[5];
+
+        IntStream.range(0, flows.length).forEach(i -> {
+            flows[i] = new FlowBuilder<Flow>("MultiFlow"+i).from(inactiveJobFlow(inactiveJobStep)).end();
+        });
+
+        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("MultiFlowTest");
+        return flowBuilder.split(taskExecutor()).add(flows).build();
+    }
+
+    @Bean
+    public Flow inactiveJobFlow(Step inactiveJobStep) {
+        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow");
+        return flowBuilder
+                .start(new InactiveJobExecutionDecider())
+                .on(FlowExecutionStatus.FAILED.getName()).end()
+                .on(FlowExecutionStatus.COMPLETED.getName()).to(inactiveJobStep)
+                .end();
     }
 }
